@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "TokenEconomizer",
+    "description": "Cuts repeat spend in a repository: it learns durable facts from failures that recur across sessions, injects them at session start, redirects a turn that keeps hitting the same wall, and reports tools that were loaded but never used. No model calls of its own.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,7 @@
+- insert:
+    - id: tokeneconomizer
+      name: 'dsh-tokeneconomizer'
+      config:
+        enabled: true
+        facts: true
+        loopguard: true
