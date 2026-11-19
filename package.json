@@ -24,6 +24,14 @@
     "AI-DISCLOSURE.md"
   ],
   "author": "zij109 <zij109@outlook.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZJ929-max/tokeneconomizer-dsh.git"
+  },
+  "homepage": "https://github.com/ZJ929-max/tokeneconomizer-dsh#readme",
+  "bugs": {
+    "url": "https://github.com/ZJ929-max/tokeneconomizer-dsh/issues"
+  },
   "license": "MPL-2.0",
   "keywords": [
     "dsh-plugin",

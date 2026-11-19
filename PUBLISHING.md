@@ -1,65 +1,38 @@
-# Publishing this repository
+# Releasing this repository
 
-The package is ready to publish. What is still missing is yours to decide: the repository
-URL and the copyright holder line.
+This package is published at
+<https://github.com/ZJ929-max/tokeneconomizer-dsh>. This file records how a release is cut
+and how the repository was first published.
 
-## 1. Fill in the manifest fields
+## Cutting a release
 
-Edit `package.json` and add or replace:
+1. Bump `version` in `package.json` when behaviour changes.
+2. Run the checks:
 
-```json
-  "author": "YOUR NAME <you@example.com>",
-  "repository": { "type": "git", "url": "https://github.com/OWNER/REPO.git" },
-  "homepage": "https://github.com/OWNER/REPO#readme",
-  "bugs": { "url": "https://github.com/OWNER/REPO/issues" },
-```
+   ```sh
+   node test/smoke.mjs
+   ```
 
-Also consider the name. `dsh-tokeneconomizer` and the display title `TokenEconomizer` refer
-to Microsoft's project. The README, `locale/*.json` and `AI-DISCLOSURE.md` already state that
-this is unaffiliated, which is the usual mitigation. If you would rather not raise the
-question at all, rename the package (for example `dsh-cost-saver`) and keep the upstream
-reference in the prose.
+   Expect `19 checks passed`. Add a case for any rule you change — those checks are the only
+   thing standing between a threshold change and a silently wrong fact.
 
-## 2. Create the commit
+3. Commit with the disclosure trailer:
 
-```sh
-git init -b main
-git add .
-git commit -m "Initial commit: TokenEconomizer mechanisms ported to DeepSeek Harness" \
-           -m "Assisted-by: DeepSeek Harness (deepseek-flash)"
-```
+   ```sh
+   git commit -m "What changed" -m "Assisted-by: <agent or model>"
+   ```
 
-The `Assisted-by:` trailer is the disclosure convention; `AI-DISCLOSURE.md` carries the
-details.
+4. Push:
 
-## 3. Create the remote and push
+   ```sh
+   git push
+   ```
 
-Create an empty repository in the browser — **no** README and **no** licence, both already
-exist — then:
+5. Confirm GitHub still shows **MPL-2.0**, and that every source file still carries the
+   Exhibit A notice. If the licence disappears from the sidebar, the `LICENSE` text was
+   edited — restore it exactly.
 
-```sh
-git remote add origin https://github.com/OWNER/REPO.git
-git push -u origin main
-```
-
-With the GitHub CLI:
-
-```sh
-gh auth login
-gh repo create OWNER/REPO --public --source . --remote origin --push \
-  --description "TokenEconomizer's cost-control mechanisms ported to DeepSeek Harness (AI-generated, MPL-2.0)"
-```
-
-## 4. Repository settings worth setting
-
-- **Description**: say "AI-generated" and "port of" in the first sentence, matching the two
-  blockquotes at the top of the README.
-- **Topics**: `deepseek-harness`, `dsh-plugin`, `token-optimization`, `ai-generated`, `mpl-2.0`.
-- **Licence detection**: GitHub should show "MPL-2.0". If it shows "View licence", the file
-  text was edited — restore the exact contents.
-- Disable **Wikis** and **Projects** if you will not use them.
-
-## 5. How users install it
+## How this repository is installed
 
 There is no npm publish step. DSH installs bundles from a directory:
 
@@ -68,16 +41,20 @@ plugin_manager { action: "install_bundle", target: "<absolute path to a clone>" 
 ```
 
 So the install instructions are: clone the repository, then add that directory through
-**Plugins > Add plugin**. `install_bundle` also accepts a package spec if you later publish
-to npm.
+**Plugins > Add plugin**. `install_bundle` also accepts a package spec if this is ever
+published to npm.
 
-## 6. Before you push, run the checks
+## How it was first published
 
-```sh
-node test/smoke.mjs
-```
+For the record, in case access has to be rebuilt:
 
-Expect `19 checks passed`. The file is plain ESM and needs no dependencies.
+- The repository was created through the GitHub web UI with no README, `.gitignore`, or
+  licence (the repository supplies its own).
+- It was pushed over SSH with a dedicated ed25519 key titled
+  `tokeneconomizer-dsh 发布 … （2）`, using a forced update to replace the single
+  web-created bootstrap commit with the real history.
+- The first commit is authored by `zij109 <zij109@outlook.com>` and carries
+  `Assisted-by: DeepSeek Harness (deepseek-flash)`.
 
-Confirm afterwards that GitHub shows MPL-2.0 and that the README's relative links
-(`AI-DISCLOSURE.md`, `LICENSE`, `docs/DETAIL.md`) resolve.
+If you no longer need the key, remove it at <https://github.com/settings/keys>; nothing
+here depends on it staying.
