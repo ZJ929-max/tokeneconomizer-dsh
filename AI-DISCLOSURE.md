@@ -37,12 +37,16 @@ Claims in the README that were checked, and how:
 
 | Claim | Evidence |
 |---|---|
-| Failure signatures normalize correctly | 19 offline checks in `test/smoke.mjs`, including a Chinese PowerShell message |
+| Failure signatures normalize correctly | offline checks in `test/smoke.mjs`, including a Chinese PowerShell message |
+| A stale fact is marked, not silently trusted | offline checks for `isStale`/`renderFacts` and the ledger cap |
+| `status` prints thresholds and seen signatures | offline check against the rendered status text |
 | A fact needs three sessions to be injected | offline check, plus the code path in `lib/facts.js` |
 | A confirmed fact is dropped after two contradictions | offline check |
 | Loop guard redirects once at the threshold and never interrupts | triggered live: three identical failing tool calls in one turn produced one injected note |
 | Facts persist to disk and are injected at session start | observed live: state file written, then the fact appeared in a later session's system prompt |
 | Shell non-zero exits count as failures | offline check against the `[exit code: N]` marker DSH emits |
+
+Offline checks in `test/smoke.mjs`: 23, all passing (`ELECTRON_RUN_AS_NODE=1 node test/smoke.mjs`).
 
 Not verified: the `agent/created` tool snapshot and `turn/end` flushing need several real
 sessions of use before their output is meaningful. Treat the tool-pruning numbers as

@@ -19,7 +19,8 @@ import path from 'node:path'
 
 import { stateRoot, repoKey, loadRepo, saveRepo, emptyRepo } from '../lib/store.js'
 import { signatureOf, isFailure, resultText } from '../lib/signature.js'
-import { touchFailure, applySuccess, renderFacts, factText } from '../lib/facts.js'
+import { touchFailure, applySuccess, renderFacts, factText, isStale, sessionsSince } from '../lib/facts.js'
+import { recordSignature, topSignatures, signatureCount } from '../lib/ledger.js'
 import { LoopGuard } from '../lib/loopguard.js'
 import { pruneProposals, createTool } from '../lib/tool.js'
 
@@ -239,6 +240,70 @@ await checkAsync('status 在空仓库上给出可读输出', async () => {
   assert.match(out.text, /TokenEconomizer/)
   const blocks = tool.output.render({}, out)
   assert.equal(blocks[0].type, 'text')
+})
+
+/* ---------------- 事实时效 ---------------- */
+check('久未复核的事实会被标注', () => {
+  const state = emptyRepo(cwd)
+  const oldSeen = Date.now() - 1_000_000
+  state.facts.push({
+    id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest', status: 'confirmed',
+    fix: '`python -m pytest`', failedCommand: 'pytest', sessions: ['s1', 's2', 's3'],
+    firstSeen: 1, lastSeen: oldSeen, contradictions: 0,
+  })
+  for (let i = 0; i < 20; i++) state.sessions.push({ id: `n${i}`, at: oldSeen + 1000 + i, loaded: [], used: [] })
+  assert.equal(sessionsSince(state, oldSeen), 20)
+  assert.equal(isStale(state.facts[0], state, 20), true)
+  const text = renderFacts(state, { staleSessions: 20 })
+  assert.match(text, /久未复核/)
+  assert.match(text, /python -m pytest/)
+})
+
+check('刚确认的事实不会被标注，过期判据可关', () => {
+  const state = emptyRepo(cwd)
+  state.facts.push({
+    id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest', status: 'confirmed',
+    fix: '`python -m pytest`', failedCommand: 'pytest', sessions: ['s1', 's2', 's3'],
+    firstSeen: 1, lastSeen: Date.now(), contradictions: 0,
+  })
+  for (let i = 0; i < 30; i++) state.sessions.push({ id: `n${i}`, at: Date.now() - 5000, loaded: [], used: [] })
+  assert.equal(isStale(state.facts[0], state, 20), false)
+  assert.doesNotMatch(renderFacts(state, { staleSessions: 20 }), /久未复核/)
+  assert.equal(isStale(state.facts[0], state, 0), false)
+})
+
+/* ---------------- 签名账本 ---------------- */
+check('签名账本记命中次数与会话数，且守上限', () => {
+  const state = emptyRepo(cwd)
+  const sig = { id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest' }
+  recordSignature(state, sig, 's1')
+  recordSignature(state, sig, 's2')
+  recordSignature(state, sig, 's2')
+  const entry = state.signatures['cmd-not-found:pytest']
+  assert.equal(entry.count, 3)
+  assert.equal(entry.sessions.length, 2)
+  assert.equal(signatureCount(state), 1)
+
+  for (let i = 0; i < 80; i++) recordSignature(state, { id: `generic:${i}`, kind: 'generic', subject: 'x' }, 's1')
+  assert.ok(signatureCount(state) <= 60, '账本不能无限增长')
+  assert.equal(topSignatures(state, 1)[0].id, 'cmd-not-found:pytest')
+})
+
+await checkAsync('status 摊开阈值、失败签名与判据', async () => {
+  const state = emptyRepo(cwd)
+  recordSignature(state, { id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest' }, 's1')
+  const runtime = {
+    settings: () => ({ confirmSessions: 3, pruneSessions: 5, contradictionsToDrop: 2, factStaleSessions: 20, loopThreshold: 3 }),
+    loadRepo: () => state,
+    cwdOf: () => cwd,
+    remember: () => false,
+    forget: () => false,
+  }
+  const out = await createTool(runtime).execute({ action: 'status' }, { agent: null })
+  assert.match(out.text, /Thresholds in effect/)
+  assert.match(out.text, /marked stale after 20 sessions/)
+  assert.match(out.text, /cmd-not-found:pytest — 1 hit/)
+  assert.match(out.text, /How they are judged/)
 })
 
 /* ---------------- 仓库键 ---------------- */

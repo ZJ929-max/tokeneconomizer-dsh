@@ -23,7 +23,7 @@ the Python code.
 
 | Mechanism | In DSH |
 |---|---|
-| Micro-skills | A fact forms when the same normalized failure shows up in different sessions of one repository **and** a later command in the same session succeeds where the failing one did not. After `confirmSessions` (3) sessions it is injected through a scoped system-prompt section. A confirmed fact that starts failing again is dropped after `contradictionsToDrop` (2) contradictions. |
+| Micro-skills | A fact forms when the same normalized failure shows up in different sessions of one repository **and** a later command in the same session succeeds where the failing one did not. After `confirmSessions` (3) sessions it is injected through a scoped system-prompt section. A confirmed fact that starts failing again is dropped after `contradictionsToDrop` (2) contradictions, and one not re-confirmed for `factStaleSessions` (20) recorded sessions is still injected but marked 久未复核（可能已过期）instead of being passed off as current. |
 | Loop guard | `tools/result` counts failures per signature within a turn. At `loopThreshold` (3) the agent gets one redirect through `agent.inject()`; at twice the threshold it gets a "still stuck, stop and say what blocks you" note. The turn is never interrupted. |
 | Tool pruning | Every turn records which tools were loaded (`ctx.tools.definitions()`) and which were used. A tool loaded across `pruneSessions` (5) sessions and never used is reported as a proposal. **Nothing is removed automatically.** |
 
@@ -31,11 +31,27 @@ No mechanism calls a model. Upstream's fact proposer and stuck-turn judge are re
 deterministic rules, which is cheaper and needs no extra credentials but is more
 conservative than upstream.
 
+### How "the same failure" is decided
+
+This is the question the two-minute video did not answer, so it is answered here and in
+`tokeneconomizer` `{ "action": "status" }`:
+
+1. Three regex families run first — command not found, missing module, missing file. A hit
+   takes the *object name* (the command, the module, the file's basename), not the whole
+   message, so the same failure reported with different paths or line numbers collapses to
+   one signature.
+2. Anything else falls back to a SHA-1 of the first three normalised output lines. That
+   fallback **can merge two different failures**, which is why every signature the plugin has
+   actually seen is listed in `status` with its hit count and session count, instead of being
+   trusted silently.
+3. A fact is still only a *pointer*: if a command listed as unavailable starts working again
+   in a new session, the fact takes a contradiction and is dropped after two.
+
 ## Use
 
 Ask the agent, or call the tool yourself:
 
-- `tokeneconomizer` `{ "action": "status" }` — facts, forming facts, pruning evidence.
+- `tokeneconomizer` `{ "action": "status" }` — thresholds in effect, facts (with expiry marks), the failure signatures it has seen, and pruning evidence.
 - `tokeneconomizer` `{ "action": "facts" }` — every fact with its id.
 - `tokeneconomizer` `{ "action": "remember", "text": "run tests with `python -m pytest tests/`" }` — store a durable repository fact immediately.
 - `tokeneconomizer` `{ "action": "forget", "id": "<id>" }` — drop one.
@@ -56,6 +72,7 @@ Set values in the profile patch row:
       config:
         loopThreshold: 4
         confirmSessions: 2
+        factStaleSessions: 30
 ```
 
 Every field: `enabled`, `facts`, `loopguard`, `confirmSessions`, `contradictionsToDrop`,

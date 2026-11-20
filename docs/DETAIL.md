@@ -20,12 +20,22 @@ that pair becomes a fact:
 It has to be confirmed by three different sessions before it is stated. Once confirmed it
 enters the system prompt at the start of each session in that repository, so the agent stops
 rediscovering it. A confirmed fact that fails again in new sessions is dropped, so a bad
-fact cannot stick.
+fact cannot stick. A fact that is never reconfirmed also ages: after `factStaleSessions`
+(20) further sessions in the repository it is still injected, but carries a
+久未复核（可能已过期）mark, because a build command that changed last month is worse than no
+fact at all when it is stated as fact.
 
 **A redirect for a stuck turn.** When the same failure repeats three times inside one turn,
 the agent gets one short note suggesting a different approach. If it keeps going, it gets a
 note that the turn looks stuck and that stopping is the user's call. The plugin never
 interrupts a turn.
+
+**A visible signature ledger.** "Same failure" is decided by three regex families (command
+not found, missing module, missing file) that take the object name, with a hash-of-text
+fallback for everything else. The fallback can merge two different failures, so every
+signature actually seen is recorded — id, hit count, how many sessions — and printed by
+`status`, together with the thresholds currently in effect. If a merge looks wrong, you can
+see it rather than take the author's word for it.
 
 **Evidence for tool pruning.** Every turn records which tools were loaded and which were
 actually called. A tool loaded across five sessions in this repository and never used is

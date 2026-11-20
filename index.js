@@ -24,6 +24,7 @@ import path from 'node:path'
 import { loadRepo, saveRepo, stateRoot } from './lib/store.js'
 import { resultText, commandOf, signatureOf, isFailure } from './lib/signature.js'
 import { touchFailure, applySuccess, renderFacts } from './lib/facts.js'
+import { recordSignature } from './lib/ledger.js'
 import { LoopGuard } from './lib/loopguard.js'
 import { createTool } from './lib/tool.js'
 
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS = {
   contradictionsToDrop: 2,
   maxFacts: 12,
   maxFactsChars: 2000,
+  factStaleSessions: 20,
   loopThreshold: 3,
   loopNudges: 1,
   pruneSessions: 5,
@@ -77,6 +79,7 @@ function buildConfig (schema) {
       contradictionsToDrop: schema.natural().description('已确认的事实被推翻几次后丢弃').default(2),
       maxFacts: schema.natural().description('最多注入几条事实').default(12),
       maxFactsChars: schema.natural().description('注入事实的字符预算').default(2000),
+      factStaleSessions: schema.natural().description('事实自上次见到后经过多少个会话就标记为可能过期').default(20),
       loopThreshold: schema.natural().description('同一失败在同一轮出现几次才介入').default(3),
       loopNudges: schema.natural().description('每轮最多转向几次').default(1),
       pruneSessions: schema.natural().description('工具裁剪建议需要多少个会话的证据').default(5),
@@ -146,6 +149,7 @@ function resolveSettings (config) {
     contradictionsToDrop: asNumber(c.contradictionsToDrop, DEFAULT_SETTINGS.contradictionsToDrop, 1),
     maxFacts: asNumber(c.maxFacts, DEFAULT_SETTINGS.maxFacts, 1),
     maxFactsChars: asNumber(c.maxFactsChars, DEFAULT_SETTINGS.maxFactsChars, 200),
+    factStaleSessions: asNumber(c.factStaleSessions, DEFAULT_SETTINGS.factStaleSessions, 1),
     loopThreshold: asNumber(c.loopThreshold, DEFAULT_SETTINGS.loopThreshold, 2),
     loopNudges: asNumber(c.loopNudges, DEFAULT_SETTINGS.loopNudges, 1),
     pruneSessions: asNumber(c.pruneSessions, DEFAULT_SETTINGS.pruneSessions, 2),
@@ -260,7 +264,11 @@ export function apply (ctx, config) {
     let text = ''
     if (cwd) {
       try {
-        text = renderFacts(stateOf(cwd), { maxFacts: settings.maxFacts, maxChars: settings.maxFactsChars })
+        text = renderFacts(stateOf(cwd), {
+          maxFacts: settings.maxFacts,
+          maxChars: settings.maxFactsChars,
+          staleSessions: settings.factStaleSessions,
+        })
       } catch {
         text = ''
       }
@@ -285,6 +293,9 @@ export function apply (ctx, config) {
       if (isFailure(result, text)) {
         const sig = signatureOf(toolName, exec?.arguments, text)
         const command = commandOf(exec?.arguments)
+
+        // 先把这笔记进账本：判据的命中结果必须可查，不能只存在于代码里
+        try { recordSignature(stateOf(cwd), sig, key) } catch { /* 忽略 */ }
 
         // 事实只从两种「环境类」失败里长：某条命令根本不存在，或缺某个模块。
         // 其它失败（缺文件、随便一条报错）仍喂给 loop guard，但截断的报错文本
