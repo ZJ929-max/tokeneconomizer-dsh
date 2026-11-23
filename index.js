@@ -20,6 +20,7 @@
  */
 
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 
 import { loadRepo, saveRepo, stateRoot } from './lib/store.js'
 import { resultText, commandOf, signatureOf, isFailure } from './lib/signature.js'
@@ -30,7 +31,14 @@ import { createFolder } from './lib/fold.js'
 import { createTool } from './lib/tool.js'
 
 export const name = 'dsh-tokeneconomizer'
-export const version = '0.1.0'
+// 版本只有一处真相：package.json。自己再写一遍就会撒谎（B0）。
+export const version = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+  } catch {
+    return '0.0.0'
+  }
+})()
 
 /** 没有工具服务就没法观察调用，插件也没有存在的意义 */
 export const inject = ['tools']
@@ -326,7 +334,8 @@ export function apply (ctx, config) {
         // 事实只从两种「环境类」失败里长：某条命令根本不存在，或缺某个模块。
         // 其它失败（缺文件、随便一条报错）仍喂给 loop guard，但截断的报错文本
         // 不是一条可执行的建议，记成事实只会污染注入。
-        const factKinds = sig.kind === 'cmd-not-found' || sig.kind === 'module-missing'
+        // file-missing 也有明确的 subject，能给出可执行建议，所以也算事实（G3）
+      const factKinds = sig.kind === 'cmd-not-found' || sig.kind === 'module-missing' || sig.kind === 'file-missing'
         if (settings.facts && factKinds) {
           let pending = pendingFailures.get(key)
           if (!pending) { pending = new Map(); pendingFailures.set(key, pending) }
@@ -343,7 +352,7 @@ export function apply (ctx, config) {
 
         if (settings.loopguard) {
           const turn = sessionMeta.get(key)?.turn ?? 0
-          const outcome = loopGuard.noteFailure(key, turn, sig)
+          const outcome = loopGuard.noteFailure(key, turn, { ...sig, tool: toolName })
           const note = outcome.redirect ?? outcome.stillStuck
           if (note) {
             try {
@@ -375,9 +384,11 @@ export function apply (ctx, config) {
           } catch { /* 忽略 */ }
         }
       }
-      // 成功后**不清循环计数**：一个卡住的 turn 里往往夹着成功的 read / grep，
-      // 任何成功都清零会让「同一轮反复撞同一面墙」几乎永远触发不了。
-      // 计数只按 turn 归零（session/event 的 turn/start），每轮最多转向一次。
+      // 成功只清「同一个工具」的失败计数：卡住的 turn 里往往夹着成功的 read / grep，
+      // 任何成功都清零会让「同一轮反复撞同一面墙」几乎永远触发不了（B1 的接线口径）。
+      if (settings.loopguard) {
+        try { loopGuard.noteSuccess(key, toolName) } catch { /* 忽略 */ }
+      }
     } catch {
       // 观察者永远不能让工具调用失败
     }
@@ -511,6 +522,7 @@ export function apply (ctx, config) {
         state.facts.push({
           id: `manual:${Date.now().toString(36)}`,
           kind: 'manual',
+          source: 'manual',
           subject: text,
           status: 'confirmed',
           fix: null,

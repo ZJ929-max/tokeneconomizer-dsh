@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2
+
+按 `docs/PORT-COMPLETENESS.md` 的 P1 对齐事实，不新增任何模型调用：
+
+- **版本只有一个真相**：`index.js` 的 `version` 直接读 `package.json`，不再自己写一份（原来写着 0.1.0，和 0.3.1 对不上）。
+- **loop guard 的进展判据接上了**：新增 `noteSuccess()`，**同一个工具**调用成功才清它名下的失败计数；别的工具成功不清（避免「卡住的轮次里夹着成功的 read 就永不触发」）。原先 `noteProgress` 定义了却从没被调用。
+- **still-stuck 不再随 `loopNudges` 漂移**：判据改成正好 `threshold×2`，与还剩几次转向无关；补了 nudges=1 与 nudges=3 两组断言。
+- **`file-missing` 也进事实**：它有明确 subject，能给出可执行建议。
+- **事实带来源**：`source: envfacts | proposer | manual`，`status` 按来源计数。
+- **文案与行为对齐**：`prune` 仍只提议，真正移除工具的是折叠；折叠的「用过即免折」明确为「从下一次会话起」。
+- 测试：smoke 23 → 28（版本同源、进展判据、nudges=3 的提醒点位、file-missing 事实）。
+
 ## 0.3.1
 
 - **去掉代码里的工具名清单**。`lib/fold.js` 原来带两份硬编码名单（永不折叠 / 默认折叠），其中写着 `view_image`、`bili_*`、`cu_*` 等**别的插件的工具名** —— 违反低耦合、无硬编码、改名即可用，也和「跨插件互操作只允许在整合包层」的约定冲突。

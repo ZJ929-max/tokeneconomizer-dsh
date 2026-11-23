@@ -23,6 +23,7 @@ import { touchFailure, applySuccess, renderFacts, factText, isStale, sessionsSin
 import { recordSignature, topSignatures, signatureCount } from '../lib/ledger.js'
 import { LoopGuard } from '../lib/loopguard.js'
 import { pruneProposals, createTool } from '../lib/tool.js'
+import { version } from '../index.js'
 
 let passed = 0
 function check (label, fn) {
@@ -193,6 +194,52 @@ check('有进展就清计数', () => {
   guard.noteFailure('s1', 1, sig)
   guard.noteProgress('s1', null)
   assert.equal(guard.noteFailure('s1', 1, sig).redirect, null)
+})
+
+/* ---------------- P1：版本、进展判据、事实来源 ---------------- */
+check('对外报告的版本与 package.json 同源', () => {
+  const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.equal(version, pkg.version)
+})
+
+check('still-stuck 正好落在两倍阈值（nudges=1）', () => {
+  const guard = new LoopGuard({ threshold: 3, nudges: 1 })
+  const sig = { id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest' }
+  const outcomes = []
+  for (let i = 0; i < 6; i++) outcomes.push(guard.noteFailure('s1', 1, sig))
+  assert.notEqual(outcomes[2].redirect, null, '第 3 次应给转向提示')
+  assert.equal(outcomes[5].stillStuck === null, false, '第 6 次应提醒人')
+})
+
+check('nudges=3 时 still-stuck 不被推迟', () => {
+  const guard = new LoopGuard({ threshold: 3, nudges: 3 })
+  const sig = { id: 'file-missing:src/app.ts', kind: 'file-missing', subject: 'src/app.ts' }
+  const outcomes = []
+  for (let i = 0; i < 6; i++) outcomes.push(guard.noteFailure('s1', 1, sig))
+  assert.equal(outcomes[2].redirect === null, false)
+  assert.equal(outcomes[3].redirect === null, false)
+  assert.equal(outcomes[4].redirect === null, false)
+  assert.equal(outcomes[5].stillStuck === null, false, '第 6 次必须提醒人，与 nudges 无关')
+})
+
+check('成功只清同一个工具的失败计数', () => {
+  const guard = new LoopGuard({ threshold: 3, nudges: 1 })
+  const sig = { id: 'cmd-not-found:pytest', kind: 'cmd-not-found', subject: 'pytest', tool: 'pwsh' }
+  guard.noteFailure('s1', 1, sig)
+  guard.noteFailure('s1', 1, sig)
+  guard.noteSuccess('s1', 'read')
+  assert.notEqual(guard.noteFailure('s1', 1, sig).redirect, null, '别的工具成功不该清零，第 3 次仍要转向')
+  guard.noteSuccess('s1', 'pwsh')
+  assert.equal(guard.noteFailure('s1', 1, sig).redirect, null, '同一工具成功清零后，计数从 1 开始')
+})
+
+check('file-missing 也进事实，并带来源', () => {
+  const state = emptyRepo(cwd)
+  const sig = { id: 'file-missing:src/app.ts', kind: 'file-missing', subject: 'src/app.ts' }
+  touchFailure(state, sig, 's1', 'cat src/app.ts')
+  const fact = state.facts.find((f) => f.id === sig.id)
+  assert.equal(fact.kind, 'file-missing')
+  assert.equal(fact.source, 'envfacts')
 })
 
 /* ---------------- 工具裁剪建议 ---------------- */
