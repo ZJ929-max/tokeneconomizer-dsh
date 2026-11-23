@@ -26,6 +26,7 @@ import { resultText, commandOf, signatureOf, isFailure } from './lib/signature.j
 import { touchFailure, applySuccess, renderFacts } from './lib/facts.js'
 import { recordSignature } from './lib/ledger.js'
 import { LoopGuard } from './lib/loopguard.js'
+import { createFolder, DEFAULT_FOLD } from './lib/fold.js'
 import { createTool } from './lib/tool.js'
 
 export const name = 'dsh-tokeneconomizer'
@@ -46,6 +47,9 @@ const DEFAULT_SETTINGS = {
   loopThreshold: 3,
   loopNudges: 1,
   pruneSessions: 5,
+  fold: true,
+  foldNames: [],
+  foldKeep: [],
   stateDir: '',
 }
 
@@ -83,6 +87,9 @@ function buildConfig (schema) {
       loopThreshold: schema.natural().description('同一失败在同一轮出现几次才介入').default(3),
       loopNudges: schema.natural().description('每轮最多转向几次').default(1),
       pruneSessions: schema.natural().description('工具裁剪建议需要多少个会话的证据').default(5),
+      fold: schema.boolean().description('把低频工具折叠成一行名字（并入自 dsh-lazy-tools）').default(true),
+      foldNames: schema.array(schema.string()).description('折叠名单，留空用内置默认；用过一次的工具永久免折').default([]),
+      foldKeep: schema.array(schema.string()).description('从折叠名单里豁免的名字').default([]),
       stateDir: schema.string().description('状态目录，留空用 $DSH_HOME/tokeneconomizer').default(''),
     })
   } catch {
@@ -153,6 +160,9 @@ function resolveSettings (config) {
     loopThreshold: asNumber(c.loopThreshold, DEFAULT_SETTINGS.loopThreshold, 2),
     loopNudges: asNumber(c.loopNudges, DEFAULT_SETTINGS.loopNudges, 1),
     pruneSessions: asNumber(c.pruneSessions, DEFAULT_SETTINGS.pruneSessions, 2),
+    fold: asBool(c.fold, DEFAULT_SETTINGS.fold),
+    foldNames: Array.isArray(c.foldNames) ? c.foldNames.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldNames,
+    foldKeep: Array.isArray(c.foldKeep) ? c.foldKeep.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldKeep,
     stateDir: typeof c.stateDir === 'string' ? c.stateDir : DEFAULT_SETTINGS.stateDir,
   }
 }
@@ -166,6 +176,17 @@ export function apply (ctx, config) {
 
   const root = stateRoot(settings.stateDir)
   const loopGuard = new LoopGuard({ threshold: settings.loopThreshold, nudges: settings.loopNudges })
+  /**
+   * 折叠（并入自 dsh-lazy-tools）：与 micro-skills / loop guard 并列的第三套机制。
+   * 只在会话边界的 pre-step 施加，回合中途绝不改工具表。
+   */
+  const folder = settings.fold
+    ? createFolder({
+        names: settings.foldNames.length > 0 ? settings.foldNames : DEFAULT_FOLD,
+        keep: settings.foldKeep,
+        statePath: path.join(root, 'fold-state.json'),
+      })
+    : null
 
   /** cwd → 仓库状态（内存副本，落盘在 turn 结束时统一做） */
   const repoStates = new Map()
@@ -289,6 +310,7 @@ export function apply (ctx, config) {
       const toolName = typeof exec?.name === 'string' ? exec.name : 'unknown'
       const record = sessionRecords.get(key)
       if (record) record.used.add(toolName)
+      try { folder?.recordUse(toolName) } catch { /* 忽略 */ }
 
       if (isFailure(result, text)) {
         const sig = signatureOf(toolName, exec?.arguments, text)
@@ -439,6 +461,12 @@ export function apply (ctx, config) {
 
   /* ---------------- 注册 ---------------- */
   ctx.on('tools/result', onToolResult)
+  // 折叠：只认「真的被调用过」，且只在下一步生效
+  ctx.on('agent/pre-step', (payload, next) => {
+    try { folder?.onPreStep(payload?.agent) } catch { /* 观察者不能让这一步失败 */ }
+    return next()
+  })
+  ctx.effect(() => () => { try { folder?.flush() } catch { /* 忽略 */ } })
   ctx.on('session/event', onSessionEvent)
   ctx.on('agent/created', onAgentCreated)
   ctx.on('agent/disposed', onAgentDisposed)
@@ -468,6 +496,7 @@ export function apply (ctx, config) {
     cwdOf,
     confirmSessions: settings.confirmSessions,
     pruneSessions: settings.pruneSessions,
+    fold: folder,
     remember (cwd, text) {
       return mutateRepo(cwd, (state) => {
         const existing = state.facts.find((f) => f.kind === 'manual' && f.subject === text)

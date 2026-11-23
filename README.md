@@ -26,6 +26,7 @@ the Python code.
 | Micro-skills | A fact forms when the same normalized failure shows up in different sessions of one repository **and** a later command in the same session succeeds where the failing one did not. After `confirmSessions` (3) sessions it is injected through a scoped system-prompt section. A confirmed fact that starts failing again is dropped after `contradictionsToDrop` (2) contradictions, and one not re-confirmed for `factStaleSessions` (20) recorded sessions is still injected but marked 久未复核（可能已过期）instead of being passed off as current. |
 | Loop guard | `tools/result` counts failures per signature within a turn. At `loopThreshold` (3) the agent gets one redirect through `agent.inject()`; at twice the threshold it gets a "still stuck, stop and say what blocks you" note. The turn is never interrupted. |
 | Tool pruning | Every turn records which tools were loaded (`ctx.tools.definitions()`) and which were used. A tool loaded across `pruneSessions` (5) sessions and never used is reported as a proposal. **Nothing is removed automatically.** |
+| Tool folding | Low-frequency tools are folded into one line at session start (`tokeneconomizer {action:"fold"}`) and loaded back with `{action:"unfold", name:"…"}`. A tool that is actually called once is never folded again, and every change happens at a session boundary, never mid-turn. Merged from the author's `dsh-lazy-tools` (formerly `dsh-tool-fold`), which itself extends upstream's `toolprune` from advice-only to an actual, reversible fold. |
 
 No mechanism calls a model. Upstream's fact proposer and stuck-turn judge are replaced by
 deterministic rules, which is cheaper and needs no extra credentials but is more
@@ -56,6 +57,8 @@ Ask the agent, or call the tool yourself:
 - `tokeneconomizer` `{ "action": "remember", "text": "run tests with `python -m pytest tests/`" }` — store a durable repository fact immediately.
 - `tokeneconomizer` `{ "action": "forget", "id": "<id>" }` — drop one.
 - `tokeneconomizer` `{ "action": "prune" }` — tools that were loaded but never used here.
+- `tokeneconomizer` `{ "action": "fold" }` — what is currently folded, one line each.
+- `tokeneconomizer` `{ "action": "unfold", "name": "<tool>" }` — load one back; it applies from the next step.
 - `tokeneconomizer` `{ "action": "config" }` — effective settings.
 
 State lives in `$DSH_HOME/tokeneconomizer/repos/<repository>.json`, one file per

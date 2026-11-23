@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- **合并**：把同作者的定位相似插件 `dsh-lazy-tools`（原名 `dsh-tool-fold`）并入本插件。原版 microsoft/TokenEconomizer 本来就有 `toolprune` 模块 —— 它只给裁剪建议、写进设置后**下一个会话才生效**，并且 "a single use protects it for good"。本插件在同样的口径上**进一步拓展了功能**：低频工具在会话开始时直接折叠成一行（`tokeneconomizer {action:"fold"}` 看清单），需要时 `{action:"unfold", name:"…"}` 取回；被真正调用过一次的工具永久免折，所有施加/撤销都只发生在会话边界，绝不在回合中途改工具表。
+- 新增 `lib/fold.js`：折叠生命周期（限制装失败时不拆旧限制、load 只在下一步生效、逐个核对限制是否还在），以及跨会话的使用账本。
+- 新增 `test/fold.mjs`：8 项时序自测（假 ctx，按 `dsh-tools` 的 restrict 语义建模）。
+- 独立插件 `dsh-lazy-tools` 暂缓更新，功能以本插件为准。
+
 ## 0.2.0 — 2026-11-20
 
 Three gaps that users raised under the video, fixed in code rather than in prose.
