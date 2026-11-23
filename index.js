@@ -26,7 +26,7 @@ import { resultText, commandOf, signatureOf, isFailure } from './lib/signature.j
 import { touchFailure, applySuccess, renderFacts } from './lib/facts.js'
 import { recordSignature } from './lib/ledger.js'
 import { LoopGuard } from './lib/loopguard.js'
-import { createFolder, DEFAULT_FOLD } from './lib/fold.js'
+import { createFolder } from './lib/fold.js'
 import { createTool } from './lib/tool.js'
 
 export const name = 'dsh-tokeneconomizer'
@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
   fold: true,
   foldNames: [],
   foldKeep: [],
+  foldAfterSessions: 3,
   stateDir: '',
 }
 
@@ -88,8 +89,9 @@ function buildConfig (schema) {
       loopNudges: schema.natural().description('每轮最多转向几次').default(1),
       pruneSessions: schema.natural().description('工具裁剪建议需要多少个会话的证据').default(5),
       fold: schema.boolean().description('把低频工具折叠成一行名字（并入自 dsh-lazy-tools）').default(true),
-      foldNames: schema.array(schema.string()).description('折叠名单，留空用内置默认；用过一次的工具永久免折').default([]),
+      foldNames: schema.array(schema.string()).description('显式折叠名单；本插件不含任何内置工具名，跨插件的取舍写在部署配置里').default([]),
       foldKeep: schema.array(schema.string()).description('从折叠名单里豁免的名字').default([]),
+      foldAfterSessions: schema.natural().description('动态折叠：连续这么多个会话零调用的工具自动进入候选；0 关闭').default(3),
       stateDir: schema.string().description('状态目录，留空用 $DSH_HOME/tokeneconomizer').default(''),
     })
   } catch {
@@ -163,6 +165,7 @@ function resolveSettings (config) {
     fold: asBool(c.fold, DEFAULT_SETTINGS.fold),
     foldNames: Array.isArray(c.foldNames) ? c.foldNames.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldNames,
     foldKeep: Array.isArray(c.foldKeep) ? c.foldKeep.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldKeep,
+    foldAfterSessions: asNumber(c.foldAfterSessions, DEFAULT_SETTINGS.foldAfterSessions, 0),
     stateDir: typeof c.stateDir === 'string' ? c.stateDir : DEFAULT_SETTINGS.stateDir,
   }
 }
@@ -182,8 +185,9 @@ export function apply (ctx, config) {
    */
   const folder = settings.fold
     ? createFolder({
-        names: settings.foldNames.length > 0 ? settings.foldNames : DEFAULT_FOLD,
+        names: settings.foldNames,
         keep: settings.foldKeep,
+        afterSessions: settings.foldAfterSessions,
         statePath: path.join(root, 'fold-state.json'),
       })
     : null

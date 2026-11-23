@@ -33,6 +33,11 @@ function makeTools (names = NAMES) {
       if (restrictions.some((r) => r.deny.has(name))) return undefined
       return { name, description: 'desc of ' + name, parameters: {} }
     },
+    definitions () {
+      return names
+        .filter((n) => !restrictions.some((r) => r.deny.has(n)))
+        .map((n) => ({ name: n, description: 'desc of ' + n, parameters: {} }))
+    },
     restrict ({ deny }) {
       stats.calls += 1
       if (stats.fail) throw new Error('unknown global tool "ghost"')
@@ -136,6 +141,39 @@ check('用过一次就落盘，并且下一个实例不再折叠它', () => {
   nextFolder.onPreStep(nextAgent)
   assert.equal(nextTools.hidden().length, NAMES.length - 1, '用过的 a3 应免折')
   assert.notEqual(nextTools.get('a3'), undefined)
+})
+
+// ---- 动态折叠：只认证据，不认名字 ----
+const dynState = path.join(tmp, 'dyn.json')
+const dynTools = makeTools()
+const dynFolder = createFolder({ afterSessions: 2, statePath: dynState })
+
+check('动态模式首次会话不折叠（没有证据）', () => {
+  dynFolder.onPreStep(makeAgent('dyn-1', dynTools))
+  assert.equal(dynTools.hidden().length, 0)
+})
+
+check('连续第二个会话零调用后才进入候选', () => {
+  dynFolder.onPreStep(makeAgent('dyn-2', dynTools))
+  assert.equal(dynTools.hidden().length, NAMES.length)
+})
+
+check('用过的工具不进入候选', () => {
+  const usedTools = makeTools()
+  const usedFolder = createFolder({ afterSessions: 2, statePath: path.join(tmp, 'used.json') })
+  usedFolder.onPreStep(makeAgent('u-1', usedTools))
+  usedFolder.recordUse('a1')
+  usedFolder.onPreStep(makeAgent('u-2', usedTools))
+  assert.equal(usedTools.hidden().includes('a1'), false)
+  assert.equal(usedTools.hidden().length, NAMES.length - 1)
+})
+
+check('keep 名单在动态模式下同样生效', () => {
+  const keepTools = makeTools()
+  const keepFolder = createFolder({ afterSessions: 2, keep: ['a5'], statePath: path.join(tmp, 'keep.json') })
+  keepFolder.onPreStep(makeAgent('k-1', keepTools))
+  keepFolder.onPreStep(makeAgent('k-2', keepTools))
+  assert.equal(keepTools.hidden().includes('a5'), false)
 })
 
 const status = folder.status('session-A')
