@@ -1,6 +1,6 @@
 {
   "name": "dsh-tokeneconomizer",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "displayName": "TokenEconomizer for DSH",
   "description": "把 microsoft/TokenEconomizer 的三套省钱机制移植到 DeepSeek Harness：跨会话学习仓库事实（micro-skills）、同轮重复失败时的转向提示（loop guard）、以及工具裁剪建议（tool pruning）。用 DSH 自己的会话事件驱动，不需要 Python，也不额外调用模型。",
   "type": "module",

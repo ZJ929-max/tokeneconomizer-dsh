@@ -176,6 +176,42 @@ check('keep 名单在动态模式下同样生效', () => {
   assert.equal(keepTools.hidden().includes('a5'), false)
 })
 
+// ---- 0.3.3: reserved / propose / restoreAll ----
+check('reserved 名字即使写进 names 也永远不折', () => {
+  const rt = makeTools([...NAMES, 'tokeneconomizer'])
+  const rf = createFolder({
+    names: [...NAMES, 'tokeneconomizer'],
+    reserved: ['tokeneconomizer'],
+    statePath: path.join(tmp, 'reserved.json'),
+  })
+  rf.onPreStep(makeAgent('r-1', rt))
+  assert.equal(rt.hidden().includes('tokeneconomizer'), false)
+  assert.equal(rt.hidden().length, NAMES.length)
+})
+
+check('propose 模式只写提案，不装限制', () => {
+  const pt = makeTools()
+  const pf = createFolder({ names: NAMES, mode: 'propose', statePath: path.join(tmp, 'propose.json') })
+  pf.onPreStep(makeAgent('p-1', pt))
+  assert.equal(pt.stats.calls, 0, 'propose 不应调用 restrict')
+  assert.equal(pt.hidden().length, 0, 'propose 不应隐藏任何工具')
+  const proposal = JSON.parse(fs.readFileSync(path.join(tmp, 'fold-proposal.json'), 'utf8'))
+  assert.equal(proposal.candidates.length, NAMES.length)
+})
+
+check('restoreAll 让下一进程不折叠，并清掉标志', () => {
+  const rp = path.join(tmp, 'restore.json')
+  fs.writeFileSync(rp, JSON.stringify({ used: {}, seen: {}, restoreAll: true }), 'utf8')
+  const rt = makeTools()
+  const rf = createFolder({ names: NAMES, statePath: rp })
+  rf.onPreStep(makeAgent('x-1', rt))
+  assert.equal(rt.hidden().length, 0)
+  assert.equal(rt.stats.calls, 0)
+  rf.flush()
+  const saved = JSON.parse(fs.readFileSync(rp, 'utf8'))
+  assert.equal(saved.restoreAll, false)
+})
+
 const status = folder.status('session-A')
 check('status 摊开折叠数/字节/重装次数', () => {
   assert.equal(status.folded, NAMES.length)

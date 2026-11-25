@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.3
+
+折叠回到上游口径，并补上外部的逃生阀：
+
+- **默认 propose**：新增 `foldMode`，默认 `propose` —— 只把候选写进 `fold-proposal.json`，**不**调用 `tools.restrict`，会话中途不动工具表。`apply` 才启用会话内限制。
+- **结构性豁免**：`reserved: ['tokeneconomizer']` 写死在 `index.js`，折叠机制自己的工具永远不进候选；不再依赖部署配置的 `foldKeep`。这是 11-25 自我锁死的直接修复。
+- **阈值对齐上游**：`foldAfterSessions` 默认 3 → **5**（上游 `s=5` 会话跨度）。
+- **外部 restore**：新增 `scripts/fold-restore.mjs`，不经过工具，直接把 `restoreAll` 写进 `fold-state.json`；插件在该进程内不再折叠，并清掉标记。折叠工具被折掉时也能用。
+- 测试：折叠自测新增 reserved / propose / restoreAll 三项。
+
 ## 0.3.2
 
 按 `docs/PORT-COMPLETENESS.md` 的 P1 对齐事实，不新增任何模型调用：

@@ -56,9 +56,10 @@ const DEFAULT_SETTINGS = {
   loopNudges: 1,
   pruneSessions: 5,
   fold: true,
+  foldMode: 'propose',
   foldNames: [],
   foldKeep: [],
-  foldAfterSessions: 3,
+  foldAfterSessions: 5,
   stateDir: '',
 }
 
@@ -97,9 +98,10 @@ function buildConfig (schema) {
       loopNudges: schema.natural().description('每轮最多转向几次').default(1),
       pruneSessions: schema.natural().description('工具裁剪建议需要多少个会话的证据').default(5),
       fold: schema.boolean().description('把低频工具折叠成一行名字（并入自 dsh-lazy-tools）').default(true),
+      foldMode: schema.union(['propose', 'apply']).description('propose=只写建议、不动工具表（默认，对齐上游）；apply=允许会话内限制').default('propose'),
       foldNames: schema.array(schema.string()).description('显式折叠名单；本插件不含任何内置工具名，跨插件的取舍写在部署配置里').default([]),
       foldKeep: schema.array(schema.string()).description('从折叠名单里豁免的名字').default([]),
-      foldAfterSessions: schema.natural().description('动态折叠：连续这么多个会话零调用的工具自动进入候选；0 关闭').default(3),
+      foldAfterSessions: schema.natural().description('动态折叠：连续这么多个会话零调用的工具自动进入候选；0 关闭（上游默认跨度 5 个会话）').default(5),
       stateDir: schema.string().description('状态目录，留空用 $DSH_HOME/tokeneconomizer').default(''),
     })
   } catch {
@@ -171,6 +173,7 @@ function resolveSettings (config) {
     loopNudges: asNumber(c.loopNudges, DEFAULT_SETTINGS.loopNudges, 1),
     pruneSessions: asNumber(c.pruneSessions, DEFAULT_SETTINGS.pruneSessions, 2),
     fold: asBool(c.fold, DEFAULT_SETTINGS.fold),
+    foldMode: c.foldMode === 'apply' ? 'apply' : 'propose',
     foldNames: Array.isArray(c.foldNames) ? c.foldNames.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldNames,
     foldKeep: Array.isArray(c.foldKeep) ? c.foldKeep.filter((n) => typeof n === 'string') : DEFAULT_SETTINGS.foldKeep,
     foldAfterSessions: asNumber(c.foldAfterSessions, DEFAULT_SETTINGS.foldAfterSessions, 0),
@@ -195,6 +198,9 @@ export function apply (ctx, config) {
     ? createFolder({
         names: settings.foldNames,
         keep: settings.foldKeep,
+        // 结构性豁免：折叠机制自己的工具永远不进候选（不能依赖部署配置）
+        reserved: ['tokeneconomizer'],
+        mode: settings.foldMode,
         afterSessions: settings.foldAfterSessions,
         statePath: path.join(root, 'fold-state.json'),
       })
